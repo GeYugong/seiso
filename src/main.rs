@@ -134,10 +134,11 @@ fn parse_workspace(args: ParseArgs) -> Result<u8, String> {
         },
         LoadScope::Selected,
     )?;
+    let root = snapshot.index.root.clone();
     let report = ParseReport {
         files: snapshot
             .index
-            .files
+            .into_files()
             .into_iter()
             .map(|file| ParsedFile {
                 filename: file.filename,
@@ -145,7 +146,7 @@ fn parse_workspace(args: ParseArgs) -> Result<u8, String> {
                     .config
                     .source
                     .as_ref()
-                    .map(|path| workspace::relative(&snapshot.index.root, path)),
+                    .map(|path| workspace::relative(&root, path)),
                 kind: resolve_kind(&file.document, file.config.kind_for(&file.path)),
                 domain: file.config.domain_for(&file.path).map(str::to_owned),
                 section_annotations: seiso::sections::classify(&file.document),

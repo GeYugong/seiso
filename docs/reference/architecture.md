@@ -70,6 +70,14 @@ policy. Generated files remain index sources but run no rules. Files without a
 valid kind receive only the kind-independent checks. Excluded and non-Markdown
 files may be checked for physical existence but do not supply Markdown anchors.
 
+`WorkspaceIndex` keeps its file list private so filename ordering and lazy
+anchor caches stay consistent. Rust callers that previously read `index.files`
+use `index.files()` for a read-only slice, or `index.into_files()` to consume
+the index and recover the owned files. Changes to files or their documents
+require constructing a new index with `WorkspaceIndex::new`; this rebuilds
+filename ordering and starts fresh anchor caches. If a frozen inventory was
+attached, supply it again with `with_inventory` on the new index.
+
 Section classification is computed from the parsed document when requested by
 `parse` or a heuristic rule. It is separate from the cached parse facts and
 does not assign a document kind. The [section reference](sections.md) defines

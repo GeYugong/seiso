@@ -18,7 +18,7 @@ pub struct CrossReport {
 
 pub fn check(index: &WorkspaceIndex) -> CrossReport {
     let mut report = CrossReport::default();
-    for file in &index.files {
+    for file in index.files() {
         if !index.complete {
             for code in DUPLICATION_RULES {
                 mark_incomplete(&mut report, file, code);
@@ -26,7 +26,7 @@ pub fn check(index: &WorkspaceIndex) -> CrossReport {
         }
         check_links(index, file, &mut report);
     }
-    let active = |code| index.files.iter().any(|file| enabled(file, code));
+    let active = |code| index.files().iter().any(|file| enabled(file, code));
     // OWN002 identifies ties from every comparison family.
     let ownership = active("OWN002");
     if active("DUP001") || active("OWN001") || ownership {
@@ -200,7 +200,7 @@ fn identifiers(document: &Document, span: Span) -> BTreeSet<String> {
 
 fn definition_units(index: &WorkspaceIndex) -> Vec<Unit> {
     let mut units = Vec::new();
-    for (file_index, file) in index.files.iter().enumerate() {
+    for (file_index, file) in index.files().iter().enumerate() {
         let document = &file.document;
         for (block_index, block) in document.blocks.iter().enumerate() {
             let mut heads = BTreeSet::new();
@@ -302,7 +302,7 @@ fn ancestors(document: &Document, block: usize) -> impl Iterator<Item = usize> +
 
 fn section_units(index: &WorkspaceIndex) -> Vec<Unit> {
     let mut units = Vec::new();
-    for (file_index, file) in index.files.iter().enumerate() {
+    for (file_index, file) in index.files().iter().enumerate() {
         for (section_index, section) in file.document.sections.iter().enumerate() {
             let values = file
                 .document
@@ -339,7 +339,7 @@ fn section_units(index: &WorkspaceIndex) -> Vec<Unit> {
 
 fn paragraph_units(index: &WorkspaceIndex) -> Vec<Unit> {
     let mut units = Vec::new();
-    for (file_index, file) in index.files.iter().enumerate() {
+    for (file_index, file) in index.files().iter().enumerate() {
         let settings = &file.config.settings.lint.dup;
         for (block_index, block) in file.document.blocks.iter().enumerate() {
             if block.kind != BlockKind::Paragraph
@@ -425,7 +425,7 @@ fn similarity_edges(
     let mut frequencies: BTreeMap<(&str, u8, &str), usize> = BTreeMap::new();
     let mut minimum_threshold: BTreeMap<(&str, u8), f64> = BTreeMap::new();
     for unit in units {
-        let file = &index.files[unit.file];
+        let file = &index.files()[unit.file];
         let domain = (file.domain.as_str(), language(file.document.language));
         let settings = &file.config.settings.lint.dup;
         let threshold = if unit.paragraph {
@@ -449,7 +449,7 @@ fn similarity_edges(
     }
     let mut edges = Edges::new();
     for (current, unit) in units.iter().enumerate() {
-        let file = &index.files[unit.file];
+        let file = &index.files()[unit.file];
         let values = if heads_only {
             &unit.heads
         } else {
@@ -479,7 +479,7 @@ fn similarity_edges(
         }
         for previous in candidates {
             let other = &units[previous];
-            let other_file = &index.files[other.file];
+            let other_file = &index.files()[other.file];
             if unit.file == other.file
                 || (plan_only
                     && file.kind.as_deref() != Some("plan")
@@ -541,7 +541,7 @@ fn restatement_edges(index: &WorkspaceIndex, units: &[Unit], report: &mut CrossR
         if unit.whole_document {
             continue;
         }
-        let file = &index.files[unit.file];
+        let file = &index.files()[unit.file];
         if unit.values.len() < file.config.settings.lint.dup.min_identifiers {
             continue;
         }
@@ -598,14 +598,14 @@ fn restatement_edges(index: &WorkspaceIndex, units: &[Unit], report: &mut CrossR
                 .enumerate()
                 .filter(|(_, unit)| {
                     !unit.whole_document
-                        && index.files[unit.file].filename == target.filename
+                        && index.files()[unit.file].filename == target.filename
                         && contains(unit.span, span)
                 })
                 .min_by_key(|(_, unit)| unit.span.len())
         } else {
             // A link without a fragment addresses the complete target document.
             units.iter().enumerate().find(|(_, unit)| {
-                index.files[unit.file].filename == target.filename && unit.whole_document
+                index.files()[unit.file].filename == target.filename && unit.whole_document
             })
         };
         let Some((target_index, target_unit)) = target_section else {
@@ -657,16 +657,16 @@ fn emit_owned(
 ) {
     for (source, neighbors) in edges {
         let unit = &units[*source];
-        let file = &index.files[unit.file];
+        let file = &index.files()[unit.file];
         let priority = rank(file);
         let higher: Vec<_> = neighbors
             .iter()
-            .filter(|neighbor| rank(&index.files[units[**neighbor].file]) > priority)
+            .filter(|neighbor| rank(&index.files()[units[**neighbor].file]) > priority)
             .copied()
             .collect();
         let tied: Vec<_> = neighbors
             .iter()
-            .filter(|neighbor| rank(&index.files[units[**neighbor].file]) == priority)
+            .filter(|neighbor| rank(&index.files()[units[**neighbor].file]) == priority)
             .copied()
             .collect();
         let (rule, peers, message, suggestion) = if !higher.is_empty() {
@@ -712,7 +712,7 @@ fn emit_owned(
         for peer in peers {
             let other = &units[peer];
             diagnostic.related.push(related(
-                &index.files[other.file],
+                &index.files()[other.file],
                 other.span,
                 if rule == "OWN002" {
                     "Matching content with the same ownership priority."
@@ -786,12 +786,14 @@ mod tests {
                 let mut expected = Edges::new();
                 for (left, source) in units.iter().enumerate() {
                     for (right, target) in units.iter().enumerate() {
-                        if left == right || !same_domain(&index.files[left], &index.files[right]) {
+                        if left == right
+                            || !same_domain(&index.files()[left], &index.files()[right])
+                        {
                             continue;
                         }
                         let shared = source.values.intersection(&target.values).count();
                         let union = source.values.union(&target.values).count();
-                        let settings = &index.files[left].config.settings.lint.dup;
+                        let settings = &index.files()[left].config.settings.lint.dup;
                         let threshold = if paragraph {
                             settings.min_paragraph_similarity
                         } else {

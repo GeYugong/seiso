@@ -65,7 +65,7 @@ pub struct Snapshot {
 impl Snapshot {
     pub fn enabled_count(&self) -> usize {
         self.index
-            .files
+            .files()
             .iter()
             .filter(|file| self.selected.contains(&file.filename))
             .map(|file| file.enabled_rules.len())

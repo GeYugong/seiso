@@ -391,7 +391,7 @@ fn apply_safe_fixes(evaluation: &Evaluation) -> (usize, Vec<InputError>) {
     let mut errors = Vec::new();
     let mut changed = 0;
     let index = &evaluation.snapshot.index;
-    for file in &index.files {
+    for file in index.files() {
         let diagnostics = evaluation
             .diagnostics
             .iter()

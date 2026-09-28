@@ -34,20 +34,20 @@ impl Analysis {
 
     pub fn same_inputs_and_diagnostics(&self, other: &Self) -> bool {
         self.diagnostics == other.diagnostics
-            && self.snapshot.index.files.len() == other.snapshot.index.files.len()
+            && self.snapshot.index.files().len() == other.snapshot.index.files().len()
             && self
                 .snapshot
                 .index
-                .files
+                .files()
                 .iter()
-                .zip(&other.snapshot.index.files)
+                .zip(other.snapshot.index.files())
                 .all(|(a, b)| a.filename == b.filename && a.document.source == b.document.source)
     }
 }
 
 /// Inspect declarations without claiming that their rules have executed.
 pub fn inspect_policy(snapshot: &mut Snapshot) {
-    for file in &snapshot.index.files {
+    for file in snapshot.index.files() {
         if file.kind.as_deref() == Some("generated") {
             continue;
         }
@@ -60,7 +60,7 @@ pub fn inspect_policy(snapshot: &mut Snapshot) {
 
 pub fn check(mut snapshot: Snapshot, overrides: &CliOverrides) -> Result<Analysis, String> {
     let index = &snapshot.index;
-    let mut cross = if index.files.iter().any(|file| {
+    let mut cross = if index.files().iter().any(|file| {
         file.enabled_rules
             .iter()
             .any(|code| rules::rule(code).is_some_and(|rule| rule.requires_index))
@@ -83,7 +83,7 @@ pub fn check(mut snapshot: Snapshot, overrides: &CliOverrides) -> Result<Analysi
             .push(diagnostic);
     }
     let mut diagnostics = Vec::new();
-    for file in &index.files {
+    for file in index.files() {
         let selected = snapshot.selected.contains(&file.filename);
         if !selected && !cross_by_file.contains_key(&file.filename) {
             continue;

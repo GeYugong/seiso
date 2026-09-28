@@ -111,7 +111,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         if !cross.errors.is_empty() {
             return Err(format!("cross-file errors: {:?}", cross.errors).into());
         }
-        for file in &index.files {
+        for file in index.files() {
             let context = CheckContext {
                 document: &file.document,
                 filename: &file.filename,
@@ -152,7 +152,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .then(|| seiso::sections::classify(&file.document)),
             });
         }
-        eprintln!("evaluated {}: {} documents", source.id, index.files.len());
+        eprintln!("evaluated {}: {} documents", source.id, index.files().len());
     }
     output.sort_by(|a, b| (&a.source, &a.path).cmp(&(&b.source, &b.path)));
     fs::write(&args[2], serde_json::to_vec(&output)?)?;

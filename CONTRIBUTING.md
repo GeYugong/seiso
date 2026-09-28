@@ -98,7 +98,9 @@ Commit messages follow
 - Use the body to explain what changed and why, wrapped at 72 characters.
 - Mark a breaking change with `!` after the type or scope and a
   `BREAKING CHANGE:` footer. Changes to CLI options, configuration keys, exit
-  codes, rule codes, and JSON or SARIF output are breaking.
+  codes, rule codes, and JSON or SARIF output are breaking. Incompatible
+  changes to the public Rust library API, such as removals or changed
+  signatures, are also breaking and must include migration guidance for callers.
 - Reference issues in the footer, for example `Refs #42`.
 
 ## Open a pull request
