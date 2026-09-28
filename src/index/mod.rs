@@ -28,9 +28,14 @@ pub struct WorkspaceIndex {
     pub root: PathBuf,
     pub files: Vec<IndexedFile>,
     pub complete: bool,
-    anchors: BTreeMap<String, BTreeSet<String>>,
-    anchor_spans: BTreeMap<String, BTreeMap<String, Span>>,
+    anchors: BTreeMap<String, OnceLock<AnchorIndex>>,
     inventory: Option<BTreeMap<String, InventoryEntryKind>>,
+}
+
+#[derive(Clone, Debug)]
+struct AnchorIndex {
+    names: BTreeSet<String>,
+    spans: BTreeMap<String, Span>,
 }
 
 /// A complete, immutable file listing for evaluations without materializing upstream files.
@@ -67,22 +72,18 @@ pub struct LinkResolution {
 }
 
 impl WorkspaceIndex {
+    /// Sort workspace files and defer anchor extraction until a lookup needs it.
     pub fn new(root: PathBuf, mut files: Vec<IndexedFile>, complete: bool) -> Self {
         files.sort_by(|left, right| left.filename.cmp(&right.filename));
-        let anchor_spans: BTreeMap<_, _> = files
+        let anchors = files
             .iter()
-            .map(|file| (file.filename.clone(), document_anchors(&file.document)))
-            .collect();
-        let anchors = anchor_spans
-            .iter()
-            .map(|(filename, spans)| (filename.clone(), spans.keys().cloned().collect()))
+            .map(|file| (file.filename.clone(), OnceLock::new()))
             .collect();
         Self {
             root,
             files,
             complete,
             anchors,
-            anchor_spans,
             inventory: None,
         }
     }
@@ -99,12 +100,24 @@ impl WorkspaceIndex {
             .map(|index| &self.files[index])
     }
 
+    /// Return the cached anchor names, initializing this document on first use.
     pub fn anchors(&self, filename: &str) -> Option<&BTreeSet<String>> {
-        self.anchors.get(filename)
+        Some(&self.anchor_index(filename)?.names)
     }
 
+    /// Locate an anchor in the original source, initializing its document on demand.
     pub fn anchor_span(&self, filename: &str, anchor: &str) -> Option<Span> {
-        self.anchor_spans.get(filename)?.get(anchor).copied()
+        self.anchor_index(filename)?.spans.get(anchor).copied()
+    }
+
+    /// Build anchors only for queried documents; ordinary file checks need none.
+    fn anchor_index(&self, filename: &str) -> Option<&AnchorIndex> {
+        let anchors = self.anchors.get(filename)?;
+        Some(anchors.get_or_init(|| {
+            let spans = document_anchors(&self.file(filename).unwrap().document);
+            let names = spans.keys().cloned().collect();
+            AnchorIndex { names, spans }
+        }))
     }
 
     /// Resolve local links using the frozen inventory when present, otherwise the filesystem.
@@ -193,10 +206,17 @@ impl WorkspaceIndex {
         }
     }
 
+    /// File-only destinations do not need the target's anchor index.
     fn indexed_status(&self, target: &str, anchor: Option<&str>) -> LinkStatus {
         match anchor {
             None | Some("") => LinkStatus::File,
-            Some(anchor) if self.anchors[target].contains(anchor) => LinkStatus::AnchorFound,
+            Some(anchor)
+                if self
+                    .anchors(target)
+                    .is_some_and(|names| names.contains(anchor)) =>
+            {
+                LinkStatus::AnchorFound
+            }
             Some(_) => LinkStatus::AnchorMissing,
         }
     }
@@ -215,7 +235,7 @@ impl WorkspaceIndex {
                 "domain": file.domain,
                 "language": file.document.language,
                 "canonical": file.document.frontmatter.as_ref().filter(|value| value.errors.is_empty()).and_then(|value| value.canonical).unwrap_or(false),
-                "anchors": self.anchor_spans[&file.filename],
+                "anchors": self.anchor_index(&file.filename).unwrap().spans,
                 "identifiers": file.document.identifiers,
                 "links": links,
             })
@@ -264,6 +284,7 @@ fn source_ends_with_attribute_list(source: &str) -> bool {
         .is_match(&line)
 }
 
+/// Extract heading slugs and explicit HTML anchors with their original spans.
 fn document_anchors(document: &Document) -> BTreeMap<String, Span> {
     let mut anchors = BTreeMap::new();
     let mut seen = BTreeSet::new();
@@ -377,8 +398,8 @@ fn document_anchors(document: &Document) -> BTreeMap<String, Span> {
                 .map_or(document.source.len(), |offset| matched.end() + offset);
         }
         for attr in attribute.captures_iter(matched.as_str()) {
-            if !attr[1].eq_ignore_ascii_case("id")
-                && !(attr[1].eq_ignore_ascii_case("name") && capture[1].eq_ignore_ascii_case("a"))
+            if !(attr[1].eq_ignore_ascii_case("id")
+                || attr[1].eq_ignore_ascii_case("name") && capture[1].eq_ignore_ascii_case("a"))
             {
                 continue;
             }
@@ -478,6 +499,59 @@ mod tests {
             enabled_rules: Vec::new(),
             config: Config::defaults(root).unwrap(),
         }
+    }
+
+    /// File-only checks and a target lookup leave unrelated anchor indexes lazy.
+    #[test]
+    fn anchors_are_built_on_demand_and_dump_still_includes_every_file() {
+        let root = tempfile::tempdir().unwrap();
+        let index = WorkspaceIndex::new(
+            root.path().to_path_buf(),
+            vec![
+                file(root.path(), "a.md", "# Source\n"),
+                file(root.path(), "b.md", "# Target\n# Target\n"),
+            ],
+            true,
+        )
+        .with_inventory(BTreeMap::new());
+        for destination in ["b.md", "b.md#", "missing.md#anchor"] {
+            index.resolve_link("a.md", destination);
+        }
+        assert!(index.anchors("missing.md").is_none());
+        assert!(index.anchor_span("missing.md", "anchor").is_none());
+        assert!(
+            index
+                .anchors
+                .values()
+                .all(|anchors| anchors.get().is_none())
+        );
+
+        assert_eq!(
+            index.resolve_link("a.md", "b.md#target-1").status,
+            LinkStatus::AnchorFound
+        );
+        assert!(index.anchors["a.md"].get().is_none());
+        let first = index.anchors("b.md").unwrap();
+        assert!(std::ptr::eq(first, index.anchors("b.md").unwrap()));
+        assert_eq!(
+            index.anchor_span("b.md", "target-1"),
+            Some(Span::new(9, 17))
+        );
+        assert_eq!(
+            index.resolve_link("a.md", "b.md#absent").status,
+            LinkStatus::AnchorMissing
+        );
+
+        let dump = index.dump();
+        assert!(dump["files"][0]["anchors"].get("source").is_some());
+        assert!(dump["files"][1]["anchors"].get("target-1").is_some());
+        assert!(
+            index
+                .anchors
+                .values()
+                .all(|anchors| anchors.get().is_some())
+        );
+        assert_eq!(dump, index.dump());
     }
 
     #[test]
