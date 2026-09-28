@@ -8,7 +8,7 @@ use globset::{GlobBuilder, GlobMatcher};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::paths::normalize;
+use crate::paths::{SiteRoutes, normalize};
 use crate::rules::{rule, rules};
 
 pub const KINDS: [&str; 8] = [
@@ -50,6 +50,8 @@ pub struct Settings {
     pub preview: bool,
     pub kinds: Vec<KindMapping>,
     pub domains: Vec<DomainMapping>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SiteMapping>,
     pub lint: LintSettings,
 }
 
@@ -61,6 +63,7 @@ impl Default for Settings {
             preview: false,
             kinds: Vec::new(),
             domains: Vec::new(),
+            sites: Vec::new(),
             lint: LintSettings::default(),
         }
     }
@@ -78,6 +81,22 @@ pub struct KindMapping {
 pub struct DomainMapping {
     pub path: String,
     pub name: String,
+}
+
+/// Documents a site generator renders, and where their route links resolve.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteMapping {
+    pub path: String,
+    pub root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public: Option<String>,
+    #[serde(default = "default_base")]
+    pub base: String,
+}
+
+fn default_base() -> String {
+    "/".into()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -171,6 +190,7 @@ pub struct Config {
     exclude: Vec<GlobMatcher>,
     kinds: Vec<GlobMatcher>,
     domains: Vec<GlobMatcher>,
+    sites: Vec<GlobMatcher>,
     per_file_ignores: Vec<(GlobMatcher, Vec<String>)>,
 }
 
@@ -235,6 +255,11 @@ impl Config {
             .iter()
             .map(|m| compile_pattern(&m.path, &label, "domains.path"))
             .collect::<Result<_, _>>()?;
+        let sites = settings
+            .sites
+            .iter()
+            .map(|m| compile_pattern(&m.path, &label, "sites.path"))
+            .collect::<Result<_, _>>()?;
         let per_file_ignores = settings
             .lint
             .per_file_ignores
@@ -254,6 +279,7 @@ impl Config {
             exclude,
             kinds,
             domains,
+            sites,
             per_file_ignores,
         })
     }
@@ -297,6 +323,63 @@ impl Config {
             .rev()
             .find(|(m, _)| m.is_match(&path))
             .map(|(_, entry)| entry.name.as_str())
+    }
+
+    pub fn site_for(&self, path: &Path) -> Option<&SiteMapping> {
+        if self.sites.is_empty() {
+            return None;
+        }
+        let path = self.relative_path(path)?;
+        self.sites
+            .iter()
+            .zip(&self.settings.sites)
+            .rev()
+            .find(|(m, _)| m.is_match(&path))
+            .map(|(_, entry)| entry)
+    }
+
+    /// Site directories must stay inside the workspace, where their pages can be checked.
+    fn with_sites_inside(self, root: &Path) -> Result<Self, ConfigError> {
+        let label = self
+            .source
+            .clone()
+            .unwrap_or_else(|| self.directory.join("seiso.toml"));
+        for site in &self.settings.sites {
+            for (field, value) in [
+                ("sites.root", Some(&site.root)),
+                ("sites.public", site.public.as_ref()),
+            ] {
+                if let Some(value) = value
+                    && !normalize(self.directory.join(value)).starts_with(root)
+                {
+                    return Err(invalid(
+                        &label,
+                        format!(
+                            "{field} {value:?} is outside workspace {}; choose a directory inside the workspace",
+                            root.display()
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(self)
+    }
+
+    /// Resolve the matching site's directories from this configuration's directory.
+    pub(crate) fn site_routes(&self, path: &Path) -> Option<SiteRoutes> {
+        let site = self.site_for(path)?;
+        let mut base = site.base.clone();
+        if !base.ends_with('/') {
+            base.push('/');
+        }
+        Some(SiteRoutes {
+            root: normalize(self.directory.join(&site.root)),
+            public: site
+                .public
+                .as_ref()
+                .map(|public| normalize(self.directory.join(public))),
+            base,
+        })
     }
 
     /// Apply selection and applicability before exposing accepted or opt-in rules.
@@ -371,7 +454,7 @@ impl Workspace {
             // An explicit configuration selects policy, not the workspace: its
             // patterns apply from the repository root around the caller.
             let root = repository_root(&cwd);
-            let config = Config::load_from(&path, &root)?;
+            let config = Config::load_from(&path, &root)?.with_sites_inside(&root)?;
             return Ok(Self {
                 root,
                 config,
@@ -380,7 +463,7 @@ impl Workspace {
         }
         for directory in cwd.ancestors() {
             if let Some(path) = config_in(directory)? {
-                let config = Config::load(&path)?;
+                let config = Config::load(&path)?.with_sites_inside(directory)?;
                 return Ok(Self {
                     root: directory.to_path_buf(),
                     config,
@@ -420,7 +503,7 @@ impl Workspace {
                 return Ok(self.config.clone());
             }
             if let Some(path) = config_in(directory)? {
-                return Config::load(&path);
+                return Config::load(&path)?.with_sites_inside(&self.root);
             }
         }
         Ok(self.config.clone())
@@ -473,6 +556,34 @@ fn validate_settings(settings: &Settings, path: &Path) -> Result<(), ConfigError
     for mapping in &settings.domains {
         if mapping.name.trim().is_empty() {
             return Err(invalid(path, "domains.name must not be empty"));
+        }
+    }
+    for site in &settings.sites {
+        for (field, value) in [
+            ("sites.root", Some(&site.root)),
+            ("sites.public", site.public.as_ref()),
+        ] {
+            if let Some(value) = value
+                && (value.trim().is_empty()
+                    || value.starts_with(['/', '\\'])
+                    || Path::new(value).is_absolute())
+            {
+                return Err(invalid(
+                    path,
+                    format!(
+                        "{field} {value:?} must be a directory relative to this configuration, such as \"docs\""
+                    ),
+                ));
+            }
+        }
+        if !site.base.starts_with('/') || site.base.contains(['?', '#']) {
+            return Err(invalid(
+                path,
+                format!(
+                    "sites.base {:?} must be a URL path that starts with /, such as \"/guide/\"",
+                    site.base
+                ),
+            ));
         }
     }
     for selector in settings
