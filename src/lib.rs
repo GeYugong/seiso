@@ -9,4 +9,5 @@ pub mod md;
 pub mod paths;
 pub mod rules;
 pub mod sections;
+pub mod server;
 pub mod workspace;

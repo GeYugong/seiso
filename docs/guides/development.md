@@ -105,6 +105,25 @@ links to dated results. See [publishing](publishing.md) for distribution validat
 
 ## Performance and ecosystem checks
 
+### Language-server latency
+
+Build the release binary and run the stdio benchmark:
+
+```sh
+cargo build --release --locked
+python -m scripts.evaluation.benchmark_server --binary target/release/seiso --documents 100 --iterations 20
+```
+
+On Windows, use `target/release/seiso.exe`. The benchmark creates a temporary
+workspace, opens one buffer, alternates its heading, and verifies that incoming
+anchor diagnostics appear and clear without saving. It reports initialization,
+first-refresh, median, p95, and maximum refresh times as JSON and verifies that
+the source file remains unchanged. Add `--no-cache` to compare parsing without
+the disk cache. Increase `--documents` to measure discovery and full-workspace
+analysis costs; these measurements do not claim incremental analysis performance.
+
+### CLI and hook latency
+
 Build a release binary before running the benchmark:
 
 ```sh

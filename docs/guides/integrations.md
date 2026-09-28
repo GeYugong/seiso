@@ -9,6 +9,32 @@ The integrations use stable rules by default. Preview rules are experimental
 and can report false positives, so try them with a local
 `seiso check --preview` before enabling them in a hook or CI gate.
 
+## Editors
+
+Configure an LSP client to launch `seiso server` from the repository directory
+for Markdown files. Use `seiso.toml` or `.git` to identify the workspace root,
+and start one process per workspace folder. The executable must be on the
+editor's PATH. For clients with separate command and argument fields, use
+command `seiso` and arguments `["server"]`.
+
+Enable diagnostics and code actions in the client. Open two linked Markdown
+documents, edit a heading without saving, and check that the incoming link's
+diagnostic updates. Safe suppression fixes appear as quick fixes when the client
+supports versioned workspace edits. Accept a fix through the editor and review
+the resulting buffer before saving.
+
+Add `--preview` to the server arguments only after reviewing the preview rules.
+Use `--select LNK001,LNK002 --preview` to focus on local file and anchor links,
+or `--no-cache` to prevent parse-cache reads and writes. The CLI check remains
+the repository gate; editor findings are advisory warnings.
+
+For external file or configuration edits, enable the client's file-watch
+support. Without watchers, save a Markdown buffer or restart the server to
+refresh disk inputs. If the client reports an out-of-sync buffer, close and
+reopen it. Inspect the LSP log for input errors and configuration failures.
+The [language-server reference](../reference/language-server.md) defines the
+protocol, supported capabilities, and execution limits.
+
 ## Claude Code
 
 Add a command hook in `.claude/settings.json`:

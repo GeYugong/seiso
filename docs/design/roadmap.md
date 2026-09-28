@@ -46,10 +46,17 @@ classification backend below. Each subproject is accepted independently.
 
 ### Editors and agent hooks
 
-Planned integrations include `seiso server` (LSP), a thin VS Code extension,
-and hook adapters for Codex CLI, Cursor, and other agents. Each integration
-needs a defined input/output contract, passing diagnostic refresh tests,
-and latency evidence before acceptance.
+`seiso server` provides the [LSP contract](../reference/language-server.md),
+multi-buffer analysis, diagnostic refresh tests, and a
+[reproducible latency benchmark](../guides/development.md#language-server-latency).
+It processes complete workspace snapshots synchronously; an incremental
+dependency graph and cancellation remain future work.
+The [language-server baseline](../evaluation/lsp-2026-09-28.md) records local
+correctness checks, measured latency, and the limits of that evidence.
+
+Planned integrations include a thin VS Code extension and hook adapters for
+Codex CLI, Cursor, and other agents. Each integration needs a defined input/output
+contract, passing diagnostic refresh tests, and latency evidence before acceptance.
 
 ### Classification backend experiment
 

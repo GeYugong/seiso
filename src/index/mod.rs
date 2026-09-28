@@ -377,8 +377,8 @@ fn document_anchors(document: &Document) -> BTreeMap<String, Span> {
                 .map_or(document.source.len(), |offset| matched.end() + offset);
         }
         for attr in attribute.captures_iter(matched.as_str()) {
-            if !attr[1].eq_ignore_ascii_case("id")
-                && !(attr[1].eq_ignore_ascii_case("name") && capture[1].eq_ignore_ascii_case("a"))
+            if !(attr[1].eq_ignore_ascii_case("id")
+                || (attr[1].eq_ignore_ascii_case("name") && capture[1].eq_ignore_ascii_case("a")))
             {
                 continue;
             }

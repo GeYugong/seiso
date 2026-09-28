@@ -44,6 +44,8 @@ enum Command {
     },
     /// Parse Markdown into the seiso document model (does not run lint rules).
     Parse(ParseArgs),
+    /// Serve live Markdown diagnostics and safe quick fixes over LSP stdio.
+    Server(commands::ServerArgs),
 }
 
 #[derive(clap::Args)]
@@ -107,6 +109,7 @@ fn run(cli: Cli) -> Result<u8, String> {
         Command::Rule(args) => commands::rule(args),
         Command::Init => commands::init(),
         Command::Hook { command } => Ok(commands::hook(command)),
+        Command::Server(args) => commands::server(args),
     }
 }
 

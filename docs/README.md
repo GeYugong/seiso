@@ -12,7 +12,7 @@ responsibilities and evidence behind those checks.
 
 - [Check Markdown](guides/checking.md): select inputs and rules, inspect policy,
   consume diagnostics, and apply safe fixes.
-- [Integrate checks](guides/integrations.md): configure agent hooks, pre-commit,
+- [Integrate checks](guides/integrations.md): configure editors, agent hooks, pre-commit,
   and CI.
 - [Develop seiso](guides/development.md): build, test, inspect parser behavior,
   and run performance or ecosystem comparisons.
@@ -27,6 +27,8 @@ responsibilities and evidence behind those checks.
   mappings, comparison domains, and rule selection.
 - [Architecture and execution](reference/architecture.md): modules, command
   input scope, links, suppression, fixes, and caching.
+- [Language server](reference/language-server.md): live buffers, diagnostic
+  refresh, LSP capabilities, and versioned quick fixes.
 
 Rule explanations are stored by rule code in [rules/](rules/). Run
 `seiso rule --all` to list implemented rules or `seiso rule CODE` to read one
@@ -45,6 +47,7 @@ fresh evidence and historical replay. Dated records preserve their results:
 - [M2 baseline decision](evaluation/m2-baseline-decision.md)
 - [M3 heuristic evaluation](evaluation/m3-2026-09-28.md)
 - [M3 context and abstention evaluation](evaluation/m3-optimization-2026-09-28.md)
+- [Language-server correctness and latency baseline](evaluation/lsp-2026-09-28.md)
 
 ## Design
 

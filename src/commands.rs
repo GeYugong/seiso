@@ -36,6 +36,33 @@ impl SelectionArgs {
 }
 
 #[derive(Args)]
+pub struct ServerArgs {
+    /// Use this configuration instead of per-directory discovery.
+    #[arg(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+    #[command(flatten)]
+    selection: SelectionArgs,
+    /// Disable the content-addressed parse cache.
+    #[arg(long)]
+    no_cache: bool,
+}
+
+pub fn server(args: ServerArgs) -> Result<u8, String> {
+    let cwd = current_dir()?;
+    seiso::server::serve(
+        io::stdin().lock(),
+        io::stdout().lock(),
+        &cwd,
+        LoadOptions {
+            config: args.config.map(|path| workspace::absolute(&cwd, &path)),
+            overrides: args.selection.overrides(),
+            no_cache: args.no_cache,
+            ..LoadOptions::default()
+        },
+    )
+}
+
+#[derive(Args)]
 pub struct CheckArgs {
     /// Files or directories to check; defaults to the workspace.
     paths: Vec<PathBuf>,

@@ -134,6 +134,19 @@ fn load_documents(
 
 /// Resolve file policies before deciding which sources a check needs to read.
 pub fn load(cwd: &Path, options: &LoadOptions, scope: LoadScope) -> Result<Snapshot, String> {
+    load_with_overlays(cwd, options, scope, &BTreeMap::new())
+}
+
+/// Load a coherent workspace with all open editor buffers replacing disk content.
+/// Overlays do not select files: `paths` and `scope` retain their usual meaning.
+/// New included Markdown paths participate in discovery and link resolution.
+/// Ignored/excluded overlays are skipped; stdin retains its stricter CLI contract.
+pub fn load_with_overlays(
+    cwd: &Path,
+    options: &LoadOptions,
+    scope: LoadScope,
+    overlays: &BTreeMap<PathBuf, String>,
+) -> Result<Snapshot, String> {
     options
         .overrides
         .validate()
@@ -144,6 +157,13 @@ pub fn load(cwd: &Path, options: &LoadOptions, scope: LoadScope) -> Result<Snaps
     let mut errors = Vec::new();
     let mut requested = BTreeSet::new();
     let mut inputs = BTreeMap::new();
+    let mut buffers = BTreeMap::new();
+    for (path, source) in overlays {
+        let path = workspace_path(&root, &absolute(cwd, path))?;
+        if is_markdown(&path) && !ignored_by_git(&root, &path, false)? {
+            buffers.insert(path, source.clone());
+        }
+    }
     let overlay = if let Some((path, source)) = &options.stdin {
         let path = workspace_path(&root, &absolute(cwd, path))?;
         if !is_markdown(&path) {
@@ -160,7 +180,10 @@ pub fn load(cwd: &Path, options: &LoadOptions, scope: LoadScope) -> Result<Snaps
     } else {
         for path in &options.paths {
             let path = workspace_path(&root, &absolute(cwd, path))?;
-            match path.try_exists() {
+            match path
+                .try_exists()
+                .map(|exists| exists || buffers.keys().any(|buffer| buffer.starts_with(&path)))
+            {
                 Ok(true) => {
                     requested.insert(path);
                 }
@@ -217,6 +240,12 @@ pub fn load(cwd: &Path, options: &LoadOptions, scope: LoadScope) -> Result<Snaps
             )),
         }
     }
+    inputs.extend(
+        buffers
+            .into_iter()
+            .map(|(path, source)| (path, Some(source))),
+    );
+    let stdin_path = overlay.as_ref().map(|(path, _)| path.clone());
     if let Some((path, source)) = overlay {
         inputs.insert(path, Some(source));
     }
@@ -272,7 +301,7 @@ pub fn load(cwd: &Path, options: &LoadOptions, scope: LoadScope) -> Result<Snaps
             if selected {
                 excluded_inputs.push((path.clone(), field, configuration.clone()));
             }
-            if source_override.is_some() {
+            if stdin_path.as_ref() == Some(&path) {
                 errors.push(InputError {filename:filename.clone(),message:"The stdin filename is excluded by configuration; choose an included Markdown path.".into()});
             }
             if scope == LoadScope::Workspace {
@@ -585,7 +614,7 @@ fn ignored_by_git(root: &Path, path: &Path, path_is_directory: bool) -> Result<b
 }
 
 /// Resolve existing aliases, including the parent of a new stdin document.
-fn workspace_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn workspace_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
     let canonical_root = root
         .canonicalize()
         .map_err(|error| format!("Cannot resolve workspace {}: {error}", root.display()))?;

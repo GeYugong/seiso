@@ -86,6 +86,10 @@ them, and keep them out of CI gates. `seiso rule --all` lists every rule with
 its status, `seiso rule <CODE>` explains a rule with examples, and `seiso parse`
 inspects the document model without running rules.
 
+For live editor feedback, configure an LSP client to run `seiso server`.
+It checks open buffers together, refreshes cross-file findings, and offers safe
+quick fixes. See the [editor setup](https://github.com/scarletkc/seiso/blob/main/docs/guides/integrations.md#editors).
+
 ## Documentation
 
 - [Checking documents](https://github.com/scarletkc/seiso/blob/main/docs/guides/checking.md): configuration, rule selection, and output formats

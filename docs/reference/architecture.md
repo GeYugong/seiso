@@ -12,6 +12,7 @@ input loading, analysis, and command rendering.
 | [`main`](../../src/main.rs), [`commands`](../../src/commands.rs) | CLI arguments, command orchestration, rendering and writes |
 | [`workspace`](../../src/workspace.rs) | Shared discovery, policy resolution, scoped reads, parsing, and input errors |
 | [`analysis`](../../src/analysis.rs) | Check execution, suppression application, report selection, and fix proposals |
+| [`server`](../../src/server/) | LSP framing, buffer synchronization, live diagnostics, and versioned quick fixes |
 | [`config`](../../src/config/mod.rs) | Configuration discovery, explicit inheritance, and path policy |
 | [`md`](../../src/md/mod.rs) | Content-derived document model and original source mappings |
 | [`paths`](../../src/paths.rs) | Path normalization, local destination parsing, and filesystem target status |
@@ -49,6 +50,13 @@ incomplete; unrelated errors outside a local check's required scope do not.
 
 Stdin replaces one named document for that invocation and can supply a new
 path within the workspace. It participates in analysis without writing a file.
+
+`workspace::load_with_overlays` extends the same loader to multiple editor
+buffers. Overlays replace content and add new included paths without selecting
+them implicitly; path and dependency scope remain separate. The language server
+checks all included files against one coherent set of open buffers and publishes
+changed or cleared findings. Its [protocol reference](language-server.md) defines
+synchronization, refresh triggers, error recovery, and quick-fix constraints.
 
 ## Document and index data
 
