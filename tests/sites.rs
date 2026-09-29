@@ -44,6 +44,23 @@ fn site_workspace(sites: &str) -> TempDir {
 
 const SITE: &str = "\n[[sites]]\npath = 'site/**'\nroot = 'site'\npublic = 'site/public'\n";
 
+/// A child policy retains the parent's site root and public asset directory.
+#[test]
+fn inherited_sites_resolve_routes_and_public_assets_from_the_parent() {
+    let workspace = site_workspace(SITE);
+    let root = workspace.path();
+    let before = run(root, &["check", "--output-format", "json"]);
+    write(root, "site/seiso.toml", "extend = '../seiso.toml'");
+    let after = run(root, &["check", "--output-format", "json"]);
+    assert_eq!(before.status.code(), after.status.code());
+    assert_eq!(value(&before), value(&after));
+    let policy = value(&run(root, &["policy"]));
+    assert_eq!(
+        policy["configurations"]["site/seiso.toml"]["pattern_bases"]["sites"][0],
+        json!({"pattern": "site/**", "base_directory": "."})
+    );
+}
+
 fn diagnostics(root: &Path) -> Vec<(String, String, String)> {
     let output = run(root, &["check", "--output-format", "json"]);
     assert_eq!(

@@ -23,9 +23,28 @@ their entries from each configuration in the inheritance chain are appended,
 in order, to the effective `exclude`, `lint.select`, and `lint.ignore` lists.
 If a child replaces one of those base arrays, the inherited additions still
 apply. `seiso policy` reports the effective lists.
-Effective glob patterns, including inherited patterns, are relative to the
-selected configuration's directory. `--config PATH` selects one configuration
-for every file; its glob patterns are relative to the workspace root.
+
+Local path entries are relative to the selected configuration's directory.
+When `extend` names the governing configuration in an ancestor directory
+(the file discovery would select there), its inherited path entries retain
+that ancestor's base. For example, `docs/seiso.toml` extending `../seiso.toml`
+keeps the parent's `exclude = ["docs/generated/**"]` effective under `docs/`.
+This applies to include/exclude patterns, kind/domain/site mappings,
+per-file ignores, and catalog directories. Site roots and public directories
+use the same base as their mapping's path.
+
+Other extended files are reusable templates: their entries resolve from the
+extending configuration's effective base, even if the template lives in a
+subdirectory. A template inherited by a governing parent first takes that
+parent's base, which is then retained by children. Local replacements use
+the child's base; per-file-ignore keys merge and keep their individual bases.
+
+`--config PATH` selects one configuration for every file. Its own entries
+are relative to the workspace root; entries inherited from a governing
+ancestor still retain that ancestor's base. `seiso policy` reports
+`pattern_bases` for every effective configuration: each entry includes its
+original `pattern` and `base_directory`, relative to the inspected workspace
+(`.` for the workspace root, `..` for its parent).
 
 The workspace root is the directory of the nearest configuration, otherwise
 the nearest ancestor containing `.git`, otherwise the calling directory. With
@@ -95,7 +114,7 @@ base = "/"             # optional: URL prefix that links include before the rout
 ```
 
 `path` is a glob; `root` and `public` are directories inside the workspace.
-All three are relative to the configuration's directory. When several entries
+All three use the mapping's base directory described above. When several entries
 match, the last wins.
 Set `base` only when links include a prefix before the route, such as
 `/docs/` in `/docs/guide/setup`. [LNK001](../rules/LNK001.md#inputs) lists
