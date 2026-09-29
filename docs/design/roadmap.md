@@ -70,7 +70,7 @@ measured result and decision as its acceptance record.
 
 ## Open design questions
 
-- Whether projects need custom kinds such as tutorials or specifications.
+- Whether projects need custom kinds such as tutorials or agent instructions.
 - Whether versioned documentation trees need automatic comparison domains.
 - Whether MDX support justifies an additional parser surface.
 - Whether rule explanations should be distributed in Chinese and Japanese.

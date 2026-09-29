@@ -26,6 +26,12 @@ the declaration does not prove that a statement is correct or current.
 | `changelog` | What happened? | Dated changes, versions, commits | No additional kind-specific restriction |
 | `generated` | What did the generator produce? | Generator-owned content | A frontmatter declaration cannot grant this exemption |
 
+`readme`, `howto`, `reference`, and `runbook` are long-lived documents.
+`generated` can only be assigned in configuration. Generated documents are
+exempt from rules but remain index sources, link targets, and possible owners
+of duplicated facts. Invalid frontmatter does not fall back to a configured
+kind. See [KND001](../rules/KND001.md) and [KND002](../rules/KND002.md) for executable examples.
+
 Classify a product requirements document (PRD) or specification using the
 responsibilities in the table above. Before implementation, a PRD or feature
 specification uses `plan`. A maintained specification of behavior that must
@@ -34,12 +40,6 @@ Record design decisions and tradeoffs in an `adr` and link to it from either
 document. Once behavior ships, move its definitions from the plan to a
 reference page and link to that page from the plan. These documents use the
 existing kinds; `prd` and `spec` are not additional kinds.
-
-`readme`, `howto`, `reference`, and `runbook` are long-lived documents.
-`generated` can only be assigned in configuration. Generated documents are
-exempt from rules but remain index sources, link targets, and possible owners
-of duplicated facts. Invalid frontmatter does not fall back to a configured
-kind. See [KND001](../rules/KND001.md) and [KND002](../rules/KND002.md) for executable examples.
 
 ## Facts and pointers
 
