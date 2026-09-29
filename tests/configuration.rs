@@ -949,3 +949,129 @@ fn extending_a_template_does_not_expand_the_workspace() {
     let workspace = Workspace::discover(&root.join("docs"), None).unwrap();
     assert_eq!(workspace.root, root.join("docs"));
 }
+
+#[test]
+fn mapping_extensions_accumulate_after_replacements_with_individual_bases() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "seiso.toml",
+        r#"
+extend-exclude = ['docs/hidden/**']
+[[kinds]]
+path = '**'
+kind = 'readme'
+[[extend-kinds]]
+path = 'docs/**'
+kind = 'reference'
+[[extend-domains]]
+path = 'docs/**'
+name = 'parent'
+[[extend-sites]]
+path = 'docs/**'
+root = 'docs'
+"#,
+    );
+    write(
+        root,
+        "docs/seiso.toml",
+        r#"
+extend = '../seiso.toml'
+extend-exclude = ['private/**']
+[[kinds]]
+path = '**'
+kind = 'howto'
+[[domains]]
+path = '**'
+name = 'replacement'
+[[sites]]
+path = '**'
+root = '.'
+[[extend-kinds]]
+path = 'api/**'
+kind = 'generated'
+[[extend-domains]]
+path = 'api/**'
+name = 'child'
+[[extend-sites]]
+path = 'api/**'
+root = 'api'
+"#,
+    );
+    write(
+        root,
+        "docs/api/seiso.toml",
+        r#"
+extend = '../seiso.toml'
+[[extend-kinds]]
+path = 'special.md'
+kind = 'plan'
+[[extend-domains]]
+path = 'special.md'
+name = 'grandchild'
+[[extend-sites]]
+path = 'special.md'
+root = '.'
+base = '/special/'
+"#,
+    );
+    let config = Config::load(&root.join("docs/api/seiso.toml")).unwrap();
+    assert_eq!(
+        config
+            .settings
+            .kinds
+            .iter()
+            .map(|m| m.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["howto", "reference", "generated", "plan"]
+    );
+    assert_eq!(config.kind_for(Path::new("page.md")), Some(Kind::Generated));
+    assert_eq!(config.kind_for(Path::new("special.md")), Some(Kind::Plan));
+    assert_eq!(config.domain_for(Path::new("page.md")), Some("child"));
+    assert_eq!(
+        config.domain_for(Path::new("special.md")),
+        Some("grandchild")
+    );
+    assert_eq!(config.site_for(Path::new("page.md")).unwrap().root, "api");
+    assert_eq!(
+        config.site_for(Path::new("special.md")).unwrap().base,
+        "/special/"
+    );
+    let bases = config.pattern_bases(root);
+    assert_eq!(
+        bases["kinds"]
+            .iter()
+            .map(|p| p.base_directory.as_str())
+            .collect::<Vec<_>>(),
+        ["docs", ".", "docs", "docs/api"]
+    );
+    assert_eq!(
+        bases["exclude"]
+            .iter()
+            .map(|p| p.base_directory.as_str())
+            .collect::<Vec<_>>(),
+        [".", "docs"]
+    );
+    let child = Config::load(&root.join("docs/seiso.toml")).unwrap();
+    assert!(child.excludes(Path::new("hidden/a.md")));
+    assert!(child.excludes(Path::new("private/a.md")));
+    assert_eq!(child.kind_for(Path::new("guide.md")), Some(Kind::Reference));
+}
+
+#[test]
+fn mapping_extensions_validate_entries_and_globs() {
+    let dir = tempdir().unwrap();
+    for source in [
+        "extend-kinds = 'wrong'",
+        "[[extend-kinds]]\npath = '**'\nkind = 'unknown'",
+        "[[extend-kinds]]\npath = '['\nkind = 'reference'",
+        "[[extend-domains]]\npath = '**'\nname = ''",
+        "[[extend-domains]]\npath = '**'\nunknown = 'x'",
+        "[[extend-sites]]\npath = '**'\nroot = '/absolute'",
+        "[[extend-sites]]\npath = '**'\nroot = '.'\nbase = 'invalid'",
+        "[[extend-sites]]\npath = '['\nroot = '.'",
+    ] {
+        assert!(Config::parse(source, dir.path()).is_err(), "{source}");
+    }
+}

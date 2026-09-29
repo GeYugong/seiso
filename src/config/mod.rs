@@ -272,6 +272,10 @@ impl Config {
             .unwrap_or_else(|| directory.join("seiso.toml"));
         let mut value = value;
         let extend_exclude = take_extension_list(&mut value, "extend-exclude", &label)?;
+        let extend_kinds = take_mapping_list::<KindMapping>(&mut value, "extend-kinds", &label)?;
+        let extend_sites = take_mapping_list::<SiteMapping>(&mut value, "extend-sites", &label)?;
+        let extend_domains =
+            take_mapping_list::<DomainMapping>(&mut value, "extend-domains", &label)?;
         let (extend_select, extend_ignore) =
             if let Some(lint) = value.as_table_mut().and_then(|table| table.get_mut("lint")) {
                 (
@@ -283,6 +287,9 @@ impl Config {
             };
         let mut settings: Settings = value.try_into().map_err(|e| invalid(&label, e))?;
         settings.exclude.extend(extend_exclude);
+        settings.kinds.extend(extend_kinds);
+        settings.sites.extend(extend_sites);
+        settings.domains.extend(extend_domains);
         bases.apply_extensions();
         settings.lint.select.extend(extend_select);
         settings.lint.ignore.extend(extend_ignore);
@@ -1050,7 +1057,12 @@ fn overlay(base: &mut toml::Value, local: toml::Value) {
                     (Some(existing), toml::Value::Array(mut additions))
                         if matches!(
                             key.as_str(),
-                            "extend-select" | "extend-ignore" | "extend-exclude"
+                            "extend-select"
+                                | "extend-ignore"
+                                | "extend-exclude"
+                                | "extend-kinds"
+                                | "extend-sites"
+                                | "extend-domains"
                         ) =>
                     {
                         if let toml::Value::Array(inherited) = existing {
@@ -1066,6 +1078,19 @@ fn overlay(base: &mut toml::Value, local: toml::Value) {
         }
         (base, local) => *base = local,
     }
+}
+
+fn take_mapping_list<T: serde::de::DeserializeOwned>(
+    value: &mut toml::Value,
+    field: &str,
+    path: &Path,
+) -> Result<Vec<T>, ConfigError> {
+    let Some(entries) = value.as_table_mut().and_then(|table| table.remove(field)) else {
+        return Ok(Vec::new());
+    };
+    entries
+        .try_into()
+        .map_err(|error| invalid(path, format!("{field}: {error}")))
 }
 
 fn take_extension_list(

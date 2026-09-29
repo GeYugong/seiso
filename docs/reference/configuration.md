@@ -42,6 +42,18 @@ in order, to the effective `exclude`, `lint.select`, and `lint.ignore` lists.
 If a child replaces one of those base arrays, the inherited additions still
 apply. `seiso policy` reports the effective lists.
 
+`[[extend-kinds]]`, `[[extend-domains]]`, and `[[extend-sites]]` append
+mappings in the same way. Their entries accumulate through the entire chain
+and apply after the final base list, even when a child replaces that list.
+The last matching entry wins; each addition retains its own pattern base.
+
+Run `seiso init --extend` below an existing configuration to create
+`seiso.toml` in the calling directory. It inherits the nearest parent and
+suggests only additive exclusions, kinds, and sites; it does not replace
+inherited lists or preview settings. Existing files are never overwritten.
+Review suggestions because a matching addition intentionally overrides the
+parent mapping for those files. Without a parent, use `seiso init` first.
+
 ## Path bases
 
 Local path entries are relative to the selected configuration's directory.

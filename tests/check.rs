@@ -1288,3 +1288,122 @@ fn hook_uses_event_cwd_converts_exit_codes_and_keeps_stdout_empty() {
         assert!(malformed.stdout.is_empty());
     }
 }
+
+#[test]
+fn init_extend_preserves_parent_policy_and_writes_only_additions() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "seiso.toml",
+        r#"
+preview = true
+exclude = ['docs/hidden/**']
+extend-exclude = ['docs/archived/**']
+[[kinds]]
+path = '**/*.md'
+kind = 'reference'
+[[kinds]]
+path = '**/generated/**'
+kind = 'generated'
+[[sites]]
+path = 'docs/**'
+root = 'docs'
+[lint]
+select = ['KND', 'LNK']
+"#,
+    );
+    for file in [
+        "docs/api.md",
+        "docs/generated/client.md",
+        "docs/hidden/a.md",
+        "docs/archived/a.md",
+    ] {
+        write(root, file, "# Page\n");
+    }
+    let before = value(&run(root, &["policy"], None));
+    let output = run(&root.join("docs"), &["init", "--extend"], None);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let contents = std::fs::read_to_string(root.join("docs/seiso.toml")).unwrap();
+    let generated: toml::Value = toml::from_str(&contents).unwrap();
+    assert_eq!(generated["extend"].as_str(), Some("../seiso.toml"));
+    for key in generated.as_table().unwrap().keys() {
+        assert!(
+            ["extend", "extend-exclude", "extend-kinds", "extend-sites"].contains(&key.as_str()),
+            "{key}"
+        );
+    }
+    let output = run(root, &["policy"], None);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let after = value(&output);
+    // Configuration filenames change, but effective file policies must not.
+    let policies = |report: &Value| {
+        report["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| {
+                let mut file = file.clone();
+                file.as_object_mut().unwrap().remove("configuration");
+                file
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(policies(&before), policies(&after));
+    assert!(run(&root.join("docs"), &["policy"], None).status.success());
+    assert_eq!(
+        run(&root.join("docs"), &["init", "--extend"], None)
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("docs/seiso.toml")).unwrap(),
+        contents
+    );
+}
+
+#[test]
+fn init_extend_uses_nearest_parent_and_suggests_additive_mappings() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(root, "seiso.toml", "");
+    write(
+        root,
+        "docs/.seiso.toml",
+        "[[kinds]]\npath = '**'\nkind = 'reference'",
+    );
+    write(root, "docs/sub/README.md", "# Readme");
+    write(root, "docs/sub/.vitepress/config.ts", "export default {}");
+    write(root, "docs/sub/vendor/a.md", "# Dependency");
+    let child = root.join("docs/sub");
+    assert!(run(&child, &["init", "--extend"], None).status.success());
+    let contents = std::fs::read_to_string(child.join("seiso.toml")).unwrap();
+    let generated: toml::Value = toml::from_str(&contents).unwrap();
+    assert_eq!(generated["extend"].as_str(), Some("../.seiso.toml"));
+    assert_eq!(
+        generated["extend-kinds"][0]["kind"].as_str(),
+        Some("readme")
+    );
+    assert_eq!(generated["extend-sites"][0]["root"].as_str(), Some("."));
+    assert_eq!(generated["extend-exclude"][0].as_str(), Some("vendor/**"));
+    assert!(run(&child, &["policy"], None).status.success());
+}
+
+#[test]
+fn init_extend_requires_parent() {
+    let dir = TempDir::new().unwrap();
+    assert_eq!(
+        run(dir.path(), &["init", "--extend"], None).status.code(),
+        Some(2)
+    );
+    assert!(!dir.path().join("seiso.toml").exists());
+}

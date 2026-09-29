@@ -19,10 +19,13 @@ impl PatternBases {
         for field in [
             "include",
             "exclude",
-            "extend-exclude",
             "kinds",
             "domains",
             "sites",
+            "extend-exclude",
+            "extend-kinds",
+            "extend-domains",
+            "extend-sites",
         ] {
             if let Some(entries) = value.get(field).and_then(toml::Value::as_array) {
                 result
@@ -63,12 +66,12 @@ impl PatternBases {
         self.ignores.extend(local.ignores);
     }
 
+    /// Append accumulated origins after the final replacement list.
     pub fn apply_extensions(&mut self) {
-        if let Some(entries) = self.lists.remove("extend-exclude") {
-            self.lists
-                .entry("exclude".into())
-                .or_default()
-                .extend(entries);
+        for field in ["exclude", "kinds", "domains", "sites"] {
+            if let Some(entries) = self.lists.remove(&format!("extend-{field}")) {
+                self.lists.entry(field.into()).or_default().extend(entries);
+            }
         }
     }
 
