@@ -95,24 +95,6 @@ impl WorkspaceIndex {
 
     /// Borrow files in filename order without invalidating lookups or cached anchors.
     /// To change the file set or its documents, construct a new index.
-    ///
-    /// Direct mutation of the stored file list is not part of the public API:
-    ///
-    /// ```compile_fail,E0616
-    /// use seiso::index::WorkspaceIndex;
-    /// fn remove_files(mut index: WorkspaceIndex) {
-    ///     index.files.clear();
-    /// }
-    /// ```
-    ///
-    /// The accessor also prevents reordering or modifying indexed documents:
-    ///
-    /// ```compile_fail,E0596
-    /// use seiso::index::WorkspaceIndex;
-    /// fn reorder_files(index: &mut WorkspaceIndex) {
-    ///     index.files().reverse();
-    /// }
-    /// ```
     pub fn files(&self) -> &[IndexedFile] {
         &self.files
     }

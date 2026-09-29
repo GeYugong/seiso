@@ -1,4 +1,7 @@
 //! Markdown analysis, configuration, diagnostics, and documentation rules.
+//!
+//! This library serves the `seiso` command-line tool, and its API can change
+//! in any release.
 
 pub mod analysis;
 pub mod cache;
