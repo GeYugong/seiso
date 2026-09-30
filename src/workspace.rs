@@ -307,10 +307,9 @@ struct Discovery {
     errors: Vec<(Option<PathBuf>, InputError)>,
 }
 
-fn discover(root: &Path, overlay: Option<(PathBuf, String)>) -> Discovery {
-    let mut inputs = BTreeMap::new();
-    let mut discovery_errors = Vec::new();
-    let walker = ignore::WalkBuilder::new(root)
+/// Discover files with the same Git ignore and repository boundaries for checks and init.
+pub fn walk_workspace(root: &Path) -> ignore::Walk {
+    ignore::WalkBuilder::new(root)
         .hidden(false)
         .follow_links(false)
         .git_ignore(true)
@@ -320,7 +319,13 @@ fn discover(root: &Path, overlay: Option<(PathBuf, String)>) -> Discovery {
         .parents(false)
         .require_git(false)
         .filter_entry(|entry| entry.file_name() != ".git" && entry.file_name() != ".seiso_cache")
-        .build();
+        .build()
+}
+
+fn discover(root: &Path, overlay: Option<(PathBuf, String)>) -> Discovery {
+    let mut inputs = BTreeMap::new();
+    let mut discovery_errors = Vec::new();
+    let walker = walk_workspace(root);
     for entry in walker {
         match entry {
             Ok(entry) => {

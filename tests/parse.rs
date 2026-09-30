@@ -109,6 +109,72 @@ fn nested_config_replaces_parent_and_frontmatter_precedes_mapping() {
 }
 
 #[test]
+fn agents_kind_is_reported_from_mapping_and_frontmatter() {
+    let workspace = configured_workspace();
+    let root = workspace.path();
+    write(
+        root,
+        "seiso.toml",
+        "[[kinds]]\npath = '**/AGENTS.md'\nkind = 'agents'\n",
+    );
+    write(root, "docs/AGENTS.md", "# Agent instructions\n");
+    write(
+        root,
+        "docs/other.md",
+        "---\nkind: agents\n---\n# Agent instructions\n",
+    );
+    let output = parse(root, &[], None);
+    assert_eq!(output.status.code(), Some(0));
+    let report = json(&output);
+    assert_eq!(report["files"][0]["kind"]["value"], "agents");
+    assert_eq!(report["files"][0]["kind"]["source"], "configuration");
+    assert_eq!(report["files"][1]["kind"]["value"], "agents");
+    assert_eq!(report["files"][1]["kind"]["source"], "frontmatter");
+}
+
+#[test]
+fn skill_frontmatter_metadata_is_separate_from_markdown_body() {
+    let workspace = configured_workspace();
+    let root = workspace.path();
+    write(
+        root,
+        "seiso.toml",
+        "[[kinds]]\npath = '**/SKILL.md'\nkind = 'agents'\n",
+    );
+    let source = "---\nname: review-docs\ndescription: >\n  Currently uses v1.2.3.\n  Review Markdown changes.\nmetadata:\n  owner: docs\n  checks:\n    - links\n    - consistency\n---\n# Review\n\nCurrently uses v2.3.4.\n";
+    write(root, ".claude/skills/review/SKILL.md", source);
+
+    let output = parse(root, &[], None);
+    assert_eq!(output.status.code(), Some(0));
+    let report = json(&output);
+    let skill = &report["files"][0];
+    assert_eq!(skill["filename"], ".claude/skills/review/SKILL.md");
+    assert_eq!(skill["kind"]["value"], "agents");
+    assert_eq!(skill["kind"]["source"], "configuration");
+    let document = &skill["document"];
+    assert_eq!(document["source"], source);
+    let frontmatter = &document["frontmatter"];
+    assert!(frontmatter["kind"].is_null());
+    assert!(frontmatter["errors"].as_array().unwrap().is_empty());
+    let raw = frontmatter["raw"].as_str().unwrap();
+    assert!(raw.contains("name: review-docs"));
+    assert!(raw.contains("description: >"));
+    assert!(raw.contains("metadata:\n  owner: docs\n  checks:"));
+    let boundary = frontmatter["span"]["end"].as_u64().unwrap() as usize;
+    let sentences = document["sentences"].as_array().unwrap();
+    assert!(!sentences.is_empty());
+    for sentence in sentences {
+        assert!(sentence["span"]["start"].as_u64().unwrap() as usize >= boundary);
+    }
+    let body = source.rfind("Currently uses v2.3.4.").unwrap();
+    assert!(sentences.iter().any(|sentence| {
+        let span = &sentence["span"];
+        span["start"].as_u64().unwrap() as usize <= body
+            && span["end"].as_u64().unwrap() as usize >= body + "Currently uses v2.3.4.".len()
+    }));
+}
+
+#[test]
 fn generated_cannot_be_claimed_by_a_document() {
     let workspace = configured_workspace();
     write(

@@ -64,6 +64,10 @@ kind = "generated"
 path = "README.md"
 kind = "readme"
 
+[[kinds]]
+path = "**/AGENTS.md"
+kind = "agents"
+
 [[domains]]
 path = "docs/client/**"
 name = "client"

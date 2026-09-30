@@ -550,6 +550,24 @@ fn kind_controls_rule_applicability() {
     assert!(reference.contains(&"RAT002"));
     let readme = rules(&config, Some("readme"), &CliOverrides::default());
     assert!(!readme.contains(&"RAT002"));
+    let agents = rules(&config, Some("agents"), &CliOverrides::default());
+    for code in [
+        "STL001", "STL002", "STL003", "STL004", "VOX001", "VOX002", "VOX003", "KND001", "LNK001",
+        "SUP001", "PTR001", "EVD001", "DUP001", "OWN002",
+    ] {
+        assert!(agents.contains(&code), "{code} should apply to agents");
+    }
+    for code in ["RAT001", "RAT002", "ORD001", "ORD002", "MIX001"] {
+        assert!(!agents.contains(&code), "{code} should not apply to agents");
+    }
+}
+
+#[test]
+fn agents_kind_is_accepted_and_serialized_in_configuration() {
+    let (_dir, config) = parse("[[kinds]]\npath = '**/AGENTS.md'\nkind = 'agents'");
+    assert_eq!(config.settings.kinds[0].kind, "agents");
+    let json = serde_json::to_value(&config.settings).unwrap();
+    assert_eq!(json["kinds"][0]["kind"], "agents");
 }
 
 #[test]

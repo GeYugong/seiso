@@ -22,6 +22,6 @@ expression: result.diagnostics
     "fix": null,
     "url": "https://github.com/scarletkc/seiso/blob/v[version]/docs/rules/KND002.md",
     "related": [],
-    "suggestion": "Use one of the lowercase kinds readme, howto, reference, runbook, adr, plan, or changelog in frontmatter."
+    "suggestion": "Use one of the lowercase kinds readme, howto, reference, runbook, agents, adr, plan, or changelog in frontmatter."
   }
 ]

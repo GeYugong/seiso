@@ -170,6 +170,38 @@ fn canonical_ties_language_and_domain_are_explicit_not_path_order() {
     );
 }
 
+#[test]
+fn agent_instructions_defer_repeated_definitions_to_readme_and_reference() {
+    let root = tempfile::tempdir().unwrap();
+    let agents = document("agents", DEFINITIONS);
+    let readme = document("readme", DEFINITIONS);
+    let reference = document("reference", DEFINITIONS);
+    let workspace = index(
+        root.path(),
+        &[
+            ("AGENTS.md", &agents),
+            ("README.md", &readme),
+            ("reference.md", &reference),
+        ],
+        "[lint]\nselect=['DUP001','OWN002']",
+    );
+    let report = check(&workspace);
+    let repeated = select(&report.diagnostics, "DUP001");
+    let agent = repeated
+        .iter()
+        .find(|diagnostic| diagnostic.filename == "AGENTS.md")
+        .unwrap();
+    assert_eq!(
+        agent
+            .related
+            .iter()
+            .map(|peer| peer.filename.as_str())
+            .collect::<Vec<_>>(),
+        ["README.md", "reference.md"]
+    );
+    assert!(select(&report.diagnostics, "OWN002").is_empty());
+}
+
 fn keys(keys: &[&str]) -> String {
     keys.iter()
         .map(|key| format!("- `{key}`: Defines this setting.\n"))

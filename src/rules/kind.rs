@@ -9,6 +9,7 @@ pub enum Kind {
     Howto,
     Reference,
     Runbook,
+    Agents,
     Adr,
     Plan,
     Changelog,
@@ -16,11 +17,12 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Readme,
         Self::Howto,
         Self::Reference,
         Self::Runbook,
+        Self::Agents,
         Self::Adr,
         Self::Plan,
         Self::Changelog,
@@ -33,6 +35,7 @@ impl Kind {
             Self::Howto => "howto",
             Self::Reference => "reference",
             Self::Runbook => "runbook",
+            Self::Agents => "agents",
             Self::Adr => "adr",
             Self::Plan => "plan",
             Self::Changelog => "changelog",

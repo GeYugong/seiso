@@ -534,8 +534,8 @@ pub fn init() -> Result<u8, String> {
         ));
     }
     // Without a configuration, discovery stops at the repository root.
-    let root = workspace.root;
-    let suggested = suggest_configuration(&root);
+    let root = workspace.root.clone();
+    let suggested = suggest_configuration(&workspace);
     let contents = suggested.render();
     let path = write_configuration(&root, &contents)?;
     let created = if root == seiso::paths::normalize(&cwd) {
@@ -564,7 +564,8 @@ struct SuggestedConfig {
     sites: Vec<SiteSuggestion>,
 }
 
-fn suggest_configuration(root: &Path) -> SuggestedConfig {
+fn suggest_configuration(workspace: &Workspace) -> SuggestedConfig {
+    let root = &workspace.root;
     let mut excludes: Vec<String> = [
         ".github/ISSUE_TEMPLATE",
         ".github/DISCUSSION_TEMPLATE",
@@ -612,12 +613,69 @@ fn suggest_configuration(root: &Path) -> SuggestedConfig {
                 .map(|path| (path, "howto")),
         );
     }
+    kinds.extend(
+        agent_kind_suggestions(workspace)
+            .into_iter()
+            .map(|path| (path.to_owned(), "agents")),
+    );
     let sites = site_suggestions(root);
     SuggestedConfig {
         excludes,
         kinds,
         sites,
     }
+}
+
+/// Suggest agent mappings only for files an ordinary check would discover.
+fn agent_kind_suggestions(workspace: &Workspace) -> Vec<&'static str> {
+    let root = &workspace.root;
+    let patterns = [
+        "**/AGENTS.md",
+        "**/CLAUDE.md",
+        "**/SKILL.md",
+        ".github/copilot-instructions.md",
+    ];
+    let mut found = [false; 4];
+    for entry in workspace::walk_workspace(root).flatten() {
+        let path = entry.path();
+        if !entry.file_type().is_some_and(|kind| kind.is_file()) || !is_markdown(path) {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        let candidate = if relative == ".github/copilot-instructions.md" {
+            Some(3)
+        } else {
+            match relative.rsplit('/').next() {
+                Some("AGENTS.md") => Some(0),
+                Some("CLAUDE.md") => Some(1),
+                Some("SKILL.md") => Some(2),
+                _ => None,
+            }
+        };
+        let Some(candidate) = candidate else {
+            continue;
+        };
+        let Ok(config) = workspace.config_for(path) else {
+            continue;
+        };
+        if config.source.as_deref() != workspace.config.source.as_deref()
+            || config.directory.as_path() != workspace.config.directory.as_path()
+        {
+            continue;
+        }
+        if !config.includes(path) || config.excludes(path) {
+            continue;
+        }
+        found[candidate] = true;
+    }
+    patterns
+        .into_iter()
+        .zip(found)
+        .filter_map(|(pattern, exists)| exists.then_some(pattern))
+        .collect()
 }
 
 impl SuggestedConfig {
@@ -1039,7 +1097,8 @@ mod tests {
         fs::write(root.join("README.md"), "# Project").unwrap();
         fs::write(root.join("CONTRIBUTING.md"), "# Contribute").unwrap();
         fs::write(root.join("mkdocs.yml"), "site_name: Project\n").unwrap();
-        let suggested = suggest_configuration(root);
+        let workspace = Workspace::discover(root, None).unwrap();
+        let suggested = suggest_configuration(&workspace);
         assert_eq!(suggested.excludes, [".github/ISSUE_TEMPLATE/**"]);
         assert_eq!(
             suggested.kinds,

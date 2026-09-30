@@ -249,9 +249,14 @@ impl Rule {
         };
         match self.kinds {
             KindScope::Any | KindScope::Declared => true,
-            KindScope::LongLived => {
-                [Kind::Readme, Kind::Howto, Kind::Reference, Kind::Runbook].contains(&kind)
-            }
+            KindScope::LongLived => [
+                Kind::Readme,
+                Kind::Howto,
+                Kind::Reference,
+                Kind::Runbook,
+                Kind::Agents,
+            ]
+            .contains(&kind),
             KindScope::ExceptChangelog => kind != Kind::Changelog,
             KindScope::HowtoOrReference => [Kind::Howto, Kind::Reference].contains(&kind),
             KindScope::HowtoOrRunbook => [Kind::Howto, Kind::Runbook].contains(&kind),

@@ -101,6 +101,39 @@ fn frontmatter_overrides_mapping_and_last_path_mapping_wins() {
 }
 
 #[test]
+fn agents_frontmatter_resolves_and_kind_errors_list_it() {
+    let root = tempfile::tempdir().unwrap();
+    let agents = evaluate(
+        root.path(),
+        "---\nkind: agents\n---\n# Instructions\n",
+        "",
+        true,
+    );
+    assert_eq!(
+        agents.kind.value.map(seiso::rules::Kind::as_str),
+        Some("agents")
+    );
+    assert!(agents.kind.problem.is_none());
+    assert!(agents.diagnostics.is_empty());
+    assert_eq!(
+        serde_json::to_value(&agents.kind).unwrap()["value"],
+        "agents"
+    );
+
+    let missing = evaluate(root.path(), "# Instructions\n", "", false);
+    assert!(missing.diagnostics[0].suggestion.contains("agents"));
+    let invalid = evaluate(
+        root.path(),
+        "---\nkind: guide\n---\n# Instructions\n",
+        "",
+        false,
+    );
+    assert_eq!(invalid.diagnostics[0].code, "KND002");
+    assert!(invalid.diagnostics[0].suggestion.contains("agents"));
+    assert!(invalid.kind.problem.as_deref().unwrap().contains("agents"));
+}
+
+#[test]
 fn local_links_use_current_filesystem_and_document_directory() {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir(root.path().join("docs")).unwrap();

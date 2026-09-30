@@ -21,12 +21,13 @@ the declaration does not prove that a statement is correct or current.
 | `howto` | How do I do this? | Steps, commands, expected results | Design arguments, complete option references |
 | `reference` | What exists? | Definitions, tables, accepted values | Procedures, project history |
 | `runbook` | How do I respond to an incident? | Inspection commands, recovery steps | Current deployment state and version snapshots |
+| `agents` | What does a coding agent need to work here? | Commands, conventions, boundaries | Project history, volatile facts, conversation remnants, facts owned by other documents; link to their sources |
 | `adr` | Why was this design chosen? | Context, decision, tradeoffs, date | No additional kind-specific restriction |
 | `plan` | What work comes next? | Proposed stages, dates, progress | Authoritative contracts for completed behavior |
 | `changelog` | What happened? | Dated changes, versions, commits | No additional kind-specific restriction |
 | `generated` | What did the generator produce? | Generator-owned content | A frontmatter declaration cannot grant this exemption |
 
-`readme`, `howto`, `reference`, and `runbook` are long-lived documents.
+`readme`, `howto`, `reference`, `runbook`, and `agents` are long-lived documents.
 `generated` can only be assigned in configuration. Generated documents are
 exempt from rules but remain index sources, link targets, and possible owners
 of duplicated facts. Invalid frontmatter does not fall back to a configured
