@@ -47,12 +47,8 @@ mappings in the same way. Their entries accumulate through the entire chain
 and apply after the final base list, even when a child replaces that list.
 The last matching entry wins; each addition retains its own pattern base.
 
-Run `seiso init --extend` below an existing configuration to create
-`seiso.toml` in the calling directory. It inherits the nearest parent and
-suggests only additive exclusions, kinds, and sites; it does not replace
-inherited lists or preview settings. Existing files are never overwritten.
-Review suggestions because a matching addition intentionally overrides the
-parent mapping for those files. Without a parent, use `seiso init` first.
+See [initialize a child configuration](../guides/checking.md#initialize-a-child-configuration)
+for the initialization procedure and policy checks.
 
 ## Path bases
 

@@ -1379,7 +1379,7 @@ fn init_extend_uses_nearest_parent_and_suggests_additive_mappings() {
     write(
         root,
         "docs/.seiso.toml",
-        "[[kinds]]\npath = '**'\nkind = 'reference'",
+        "extend = '../seiso.toml'\n[[kinds]]\npath = '**'\nkind = 'reference'",
     );
     write(root, "docs/sub/README.md", "# Readme");
     write(root, "docs/sub/.vitepress/config.ts", "export default {}");
@@ -1406,4 +1406,85 @@ fn init_extend_requires_parent() {
         Some(2)
     );
     assert!(!dir.path().join("seiso.toml").exists());
+}
+
+#[test]
+fn init_extend_preserves_child_cwd_git_ignores_and_inherited_routes() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "seiso.toml",
+        "preview = true\n[lint]\nselect = ['LNK001', 'LNK002']\n[[kinds]]\npath = '**/*.md'\nkind = 'reference'\n[[sites]]\npath = 'docs/**'\nroot = 'docs'\n[[sites]]\npath = 'website/**'\nroot = 'website'\n",
+    );
+    write(
+        root,
+        ".gitignore",
+        "docs/guide/private.md\ndocs/guide/AGENTS.md\n",
+    );
+    write(root, "docs/index.md", "# Home\n\n## Install\n");
+    write(
+        root,
+        "docs/guide/page.md",
+        "# Guide\n\n[Home](/index#install)\n",
+    );
+    write(root, "docs/guide/private.md", "[Missing](missing.md)\n");
+    write(root, "docs/guide/AGENTS.md", "[Missing](missing.md)\n");
+    write(root, "notes/page.md", "# Notes\n");
+    // Include a non-matching sibling site as well as a matching ancestor site.
+    for child in [root.join("docs/guide"), root.join("notes")] {
+        let args = &["check", "--no-cache", "--output-format", "json"];
+        let before = run(&child, args, None);
+        assert!(
+            before.status.success(),
+            "{}",
+            String::from_utf8_lossy(&before.stderr)
+        );
+        assert_eq!(value(&before), json!([]));
+        let init = run(&child, &["init", "--extend"], None);
+        assert!(
+            init.status.success(),
+            "{}",
+            String::from_utf8_lossy(&init.stderr)
+        );
+        let contents = std::fs::read_to_string(child.join("seiso.toml")).unwrap();
+        let generated: toml::Value = toml::from_str(&contents).unwrap();
+        assert_eq!(generated.as_table().unwrap().len(), 1, "{contents}");
+        let policy = run(&child, &["policy"], None);
+        assert!(
+            policy.status.success(),
+            "{}",
+            String::from_utf8_lossy(&policy.stderr)
+        );
+        assert!(!String::from_utf8_lossy(&policy.stdout).contains("private.md"));
+        let after = run(&child, args, None);
+        assert!(
+            after.status.success(),
+            "{}",
+            String::from_utf8_lossy(&after.stderr)
+        );
+        assert_eq!(value(&after), value(&before));
+    }
+    let child = root.join("docs/guide");
+    let ignored = run(&child, &["check", "private.md", "--no-cache"], None);
+    assert!(ignored.status.success());
+    assert!(String::from_utf8_lossy(&ignored.stderr).contains(".gitignore"));
+    let stdin = run(
+        &child,
+        &["check", "--stdin-filename", "private.md"],
+        Some("# Draft\n"),
+    );
+    assert_eq!(stdin.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&stdin.stderr).contains(".gitignore"));
+    write(root, "docs/index.md", "# Home\n");
+    let broken = run(
+        &child,
+        &["check", "page.md", "--no-cache", "--output-format", "json"],
+        None,
+    );
+    assert_eq!(broken.status.code(), Some(1));
+    let diagnostics = value(&broken);
+    assert_eq!(diagnostics.as_array().unwrap().len(), 1);
+    assert_eq!(diagnostics[0]["code"], "LNK002");
+    assert_eq!(diagnostics[0]["filename"], "docs/guide/page.md");
 }

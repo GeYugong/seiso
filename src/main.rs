@@ -27,7 +27,7 @@ enum Command {
     Index(commands::IndexArgs),
     /// Print a rule's explanation and examples.
     Rule(commands::RuleArgs),
-    /// Create a repository-root configuration with suggested exclusions and kind mappings.
+    /// Create a configuration with suggested exclusions and kind mappings.
     Init {
         /// Create a child configuration here, inheriting the nearest parent configuration.
         #[arg(long)]
