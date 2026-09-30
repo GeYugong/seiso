@@ -10,12 +10,30 @@ output. The accepted fields and defaults are defined by `Settings`,
 `LintSettings`, `DupSettings`, `PtrSettings`, and `Lexicon` in
 [`src/config/mod.rs`](../../src/config/mod.rs).
 
-## Discovery and inheritance
+## Discovery and workspace roots
 
 Each file uses its nearest configuration. In one directory, precedence is
 `.seiso.toml`, then `seiso.toml`, then `pyproject.toml` containing `[tool.seiso]`.
 Parent configurations are not implicitly merged. `extend = "path/to/base.toml"`
 opts into inheritance; the path is relative to the declaring configuration.
+
+The workspace root is the nearest configuration's directory. When that
+configuration explicitly inherits a governing ancestor configuration, the
+workspace root is that ancestor's directory, following the inheritance chain.
+This preserves discovery, Git ignore coverage, and site pages outside the child
+directory. Each discovered file still uses its own nearest configuration.
+Extending a reusable template does not expand the workspace.
+Without a configuration, the root is the nearest ancestor containing `.git`,
+otherwise the calling directory. With `--config`, the root is the nearest
+ancestor containing `.git`, otherwise the calling directory.
+
+Paths given on the command line are relative to the caller; reported paths
+are relative to the workspace. With no explicit paths, checks cover the whole
+workspace. Explicit paths still respect include, exclude, and Git ignore policy.
+Unknown fields and unsupported selectors are errors.
+
+## Merging
+
 Tables merge key by key. Arrays, including `include`, `exclude`, `[[kinds]]`,
 and `lint.select`, replace the inherited value instead of adding to it.
 `extend-exclude`, `lint.extend-select`, and `lint.extend-ignore` are additive:
@@ -23,6 +41,8 @@ their entries from each configuration in the inheritance chain are appended,
 in order, to the effective `exclude`, `lint.select`, and `lint.ignore` lists.
 If a child replaces one of those base arrays, the inherited additions still
 apply. `seiso policy` reports the effective lists.
+
+## Path bases
 
 Local path entries are relative to the selected configuration's directory.
 When `extend` names the governing configuration in an ancestor directory
@@ -45,14 +65,6 @@ ancestor still retain that ancestor's base. `seiso policy` reports
 `pattern_bases` for every effective configuration: each entry includes its
 original `pattern` and `base_directory`, relative to the inspected workspace
 (`.` for the workspace root, `..` for its parent).
-
-The workspace root is the directory of the nearest configuration, otherwise
-the nearest ancestor containing `.git`, otherwise the calling directory. With
-`--config`, the root is the nearest ancestor containing `.git`, otherwise the
-calling directory. Paths
-given on the command line are relative to the caller; reported paths are
-relative to the workspace. Explicit paths still respect include, exclude, and
-Git ignore policy. Unknown fields and unsupported selectors are errors.
 
 ## Kinds and domains
 
@@ -114,7 +126,7 @@ base = "/"             # optional: URL prefix that links include before the rout
 ```
 
 `path` is a glob; `root` and `public` are directories inside the workspace.
-All three use the mapping's base directory described above. When several entries
+All three use the mapping's [path base](#path-bases). When several entries
 match, the last wins.
 Set `base` only when links include a prefix before the route, such as
 `/docs/` in `/docs/guide/setup`. [LNK001](../rules/LNK001.md#inputs) lists

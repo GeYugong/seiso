@@ -912,3 +912,40 @@ fn inherited_additive_exclusions_keep_each_declaring_base() {
         ["docs", ".", "docs", "docs/api"]
     );
 }
+
+#[test]
+fn governing_inheritance_keeps_workspace_even_without_inherited_path_entries() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    write(root, "seiso.toml", "");
+    write(root, "docs/seiso.toml", "extend = '../seiso.toml'\n");
+    write(root, "docs/guide/seiso.toml", "extend = '../seiso.toml'\n");
+    let workspace = Workspace::discover(&root.join("docs/guide"), None).unwrap();
+    assert_eq!(workspace.root, root);
+    assert_eq!(
+        workspace
+            .config_for(&root.join("docs/guide/page.md"))
+            .unwrap()
+            .directory,
+        root.join("docs/guide")
+    );
+    assert_eq!(
+        workspace
+            .config_for(&root.join("index.md"))
+            .unwrap()
+            .directory,
+        root
+    );
+}
+
+#[test]
+fn extending_a_template_does_not_expand_the_workspace() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    write(root, ".seiso.toml", "");
+    write(root, "seiso.toml", "");
+    // The shadowed file is a template, not the governing ancestor.
+    write(root, "docs/seiso.toml", "extend = '../seiso.toml'\n");
+    let workspace = Workspace::discover(&root.join("docs"), None).unwrap();
+    assert_eq!(workspace.root, root.join("docs"));
+}

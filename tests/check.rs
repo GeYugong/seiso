@@ -34,10 +34,7 @@ fn parent_inheritance_preserves_check_coverage_and_reports_bases() {
         json!({"pattern": "docs/**/*.md", "base_directory": "."})
     );
     let child = value(&run(&root.join("docs"), &["policy"], None));
-    assert_eq!(
-        child["configurations"]["seiso.toml"]["pattern_bases"]["include"][1]["base_directory"],
-        ".."
-    );
+    assert_eq!(child, report);
 }
 
 #[test]

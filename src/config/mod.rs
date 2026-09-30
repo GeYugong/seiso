@@ -209,6 +209,7 @@ pub struct Config {
     pub directory: PathBuf,
     pub settings: Settings,
     bases: PatternBases,
+    inherited_root: PathBuf,
     include: Vec<ScopedGlob>,
     exclude: Vec<ScopedGlob>,
     kinds: Vec<(ScopedGlob, Kind)>,
@@ -225,8 +226,10 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let path = absolute(path)?;
         let directory = parent(&path).to_path_buf();
-        let (value, bases) = load_extended(&path, &directory, &mut Vec::new())?;
-        Self::from_value(value, bases, directory, Some(path))
+        let (value, bases, inherited_root) = load_extended(&path, &directory, &mut Vec::new())?;
+        let mut config = Self::from_value(value, bases, directory, Some(path))?;
+        config.inherited_root = inherited_root;
+        Ok(config)
     }
 
     /// Load an explicitly selected configuration whose patterns apply from `directory`.
@@ -235,7 +238,7 @@ impl Config {
     pub fn load_from(path: &Path, directory: &Path) -> Result<Self, ConfigError> {
         let path = absolute(path)?;
         let directory = absolute(directory)?;
-        let (value, bases) = load_extended(&path, &directory, &mut Vec::new())?;
+        let (value, bases, _) = load_extended(&path, &directory, &mut Vec::new())?;
         Self::from_value(value, bases, directory, Some(path))
     }
 
@@ -352,6 +355,7 @@ impl Config {
             .collect::<Result<_, ConfigError>>()?;
         Ok(Self {
             source,
+            inherited_root: directory.clone(),
             directory,
             settings,
             bases,
@@ -644,9 +648,22 @@ impl Workspace {
         }
         for directory in cwd.ancestors() {
             if let Some(path) = config_in(directory)? {
-                let config = Config::load(&path)?.with_sites_inside(directory)?;
+                let selected = Config::load(&path)?;
+                // An explicitly inherited governing ancestor owns the workspace.
+                // Discover all of its inputs so routes, indexes, and Git ignores
+                // keep the same boundary when a child configuration is added.
+                let root = selected.inherited_root.clone();
+                let config = if root == directory {
+                    selected
+                } else {
+                    let path = config_in(&root)?.ok_or_else(|| {
+                        invalid(&path, "inherited workspace configuration is missing")
+                    })?;
+                    Config::load(&path)?
+                }
+                .with_sites_inside(&root)?;
                 return Ok(Self {
-                    root: directory.to_path_buf(),
+                    root,
                     config,
                     explicit_config: false,
                 });
@@ -959,7 +976,7 @@ fn load_extended(
     path: &Path,
     directory: &Path,
     stack: &mut Vec<PathBuf>,
-) -> Result<(toml::Value, PatternBases), ConfigError> {
+) -> Result<(toml::Value, PatternBases, PathBuf), ConfigError> {
     if stack.len() >= 128 {
         return Err(invalid(
             path,
@@ -983,6 +1000,7 @@ fn load_extended(
     let mut value = read_document(path)?
         .ok_or_else(|| invalid(path, "pyproject.toml has no [tool.seiso] table"))?;
     let mut bases = PatternBases::new(&value, directory);
+    let mut inherited_root = directory.to_path_buf();
     let extension = value
         .as_table_mut()
         .and_then(|table| table.remove("extend"));
@@ -993,15 +1011,18 @@ fn load_extended(
             .ok_or_else(|| invalid(path, "extend must be a non-empty configuration file path"))?;
         let inherited_path = normalize(parent(path).join(extension));
         let inherited_directory = inherited_directory(path, &inherited_path, directory)?;
-        let (mut base, mut inherited_bases) =
+        let (mut base, mut inherited_bases, root) =
             load_extended(&inherited_path, &inherited_directory, stack)?;
+        if directory.starts_with(&root) {
+            inherited_root = root;
+        }
         overlay(&mut base, value);
         inherited_bases.overlay(bases);
         bases = inherited_bases;
         value = base;
     }
     stack.pop();
-    Ok((value, bases))
+    Ok((value, bases, inherited_root))
 }
 
 /// Only an ancestor's governing configuration fixes its own base directory.
